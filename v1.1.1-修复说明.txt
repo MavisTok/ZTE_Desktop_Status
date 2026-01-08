@@ -1,0 +1,214 @@
+╔════════════════════════════════════════════════════════════════╗
+║                                                                ║
+║     ZTE Router Dashboard - v1.1.1 紧急修复                    ║
+║                                                                ║
+║     修复: ObjectDisposedException (JsonDocument 已释放)       ║
+║                                                                ║
+╚════════════════════════════════════════════════════════════════╝
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🐛 修复的问题
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+问题: 运行时出现错误
+  Error: 无法访问已释放的对象。对象名:"JsonDocument"。
+
+原因: JsonDocument 生命周期管理问题
+  - JsonDocument 在 using 语句结束时被释放
+  - 返回的 JsonElement 还在引用已释放的 JsonDocument
+  - 访问 JsonElement 时触发 ObjectDisposedException
+
+影响: 应用无法正常刷新数据，底部状态栏显示错误
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ✅ 修复内容
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. UbusClient.cs - PostRawAsync 方法
+   修改前:
+     return doc.RootElement.EnumerateArray().ToArray();
+     ↑ 返回 JsonElement[]，引用已释放的 JsonDocument
+
+   修改后:
+     return doc.RootElement.EnumerateArray()
+         .Select(e => e.GetRawText())
+         .ToArray();
+     ↑ 返回 string[]，独立于 JsonDocument
+
+2. UbusClient.cs - BatchCallAsync 方法
+   添加 JsonElement 克隆逻辑:
+     var clonedPayload = JsonDocument.Parse(payload.GetRawText()).RootElement;
+     map[id] = clonedPayload;
+     ↑ 创建新的 JsonDocument，避免引用已释放的对象
+
+3. UbusClient.cs - CallAsJsonAsync 方法
+   添加 JsonElement 克隆逻辑:
+     return JsonDocument.Parse(payload.GetRawText()).RootElement;
+     ↑ 克隆 payload 为独立的 JsonElement
+
+4. DashboardViewModel.cs - 错误处理增强
+   添加详细的错误分类处理:
+     - HttpRequestException: 网络错误
+     - JsonException: JSON 解析错误
+     - ObjectDisposedException: 对象释放错误
+     - 通用 Exception: 其他错误
+
+   错误信息改进:
+     - 显示错误类型、消息和内部异常
+     - 限制显示长度为 200 字符
+     - 完整错误输出到 Visual Studio 调试窗口
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📝 新增文档
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 错误诊断指南.md
+   - 如何查看详细错误信息
+   - 6 种常见错误及解决方案
+   - 高级诊断方法
+   - 问题报告模板
+
+📄 v1.1.1-修复说明.txt (本文件)
+   - 修复内容详细说明
+   - 升级指南
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🚀 升级步骤
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+如果你遇到了 ObjectDisposedException 错误:
+
+步骤 1: 确保代码已更新
+  检查 Api\UbusClient.cs 文件
+  - 第 70 行应该是: public async Task<string[]> PostRawAsync(...)
+  - 第 111 行应该有: var clonedPayload = ...
+
+步骤 2: 清理并重新生成
+  在 Visual Studio 中:
+  1. 菜单: 生成 → 清理解决方案
+  2. 菜单: 生成 → 重新生成解决方案
+  3. 或快捷键: Ctrl + Shift + B
+
+步骤 3: 运行测试
+  1. 按 F5 运行应用
+  2. 观察底部状态栏
+  3. 应该显示: ● Status: Connected
+  4. 数据应该每 2 秒刷新
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🔍 验证修复
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+成功的标志:
+  ✓ 底部状态栏显示: ● Status: Connected
+  ✓ 不再出现 "ObjectDisposedException" 错误
+  ✓ 数据正常刷新 (每 2 秒)
+  ✓ 所有 6 个卡片都显示数据
+  ✓ 右上角时间在跳动
+
+如果仍有错误:
+  1. 查看底部状态栏的错误消息
+  2. 打开 Visual Studio 输出窗口 (Ctrl + Alt + O)
+  3. 查看详细的错误堆栈跟踪
+  4. 参考 "错误诊断指南.md"
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📊 技术细节
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+JsonDocument 生命周期问题说明:
+
+问题代码 (修复前):
+┌────────────────────────────────────────────────────────────┐
+│ public async Task<JsonElement[]> PostRawAsync(...)         │
+│ {                                                           │
+│     using var doc = JsonDocument.Parse(respText);          │
+│     return doc.RootElement.EnumerateArray().ToArray();     │
+│     //     ↑                                               │
+│     //     doc 在这里被释放，但返回的 JsonElement[]        │
+│     //     还在引用它，导致后续访问时出错                  │
+│ }                                                           │
+└────────────────────────────────────────────────────────────┘
+
+修复代码 (v1.1.1):
+┌────────────────────────────────────────────────────────────┐
+│ public async Task<string[]> PostRawAsync(...)              │
+│ {                                                           │
+│     using var doc = JsonDocument.Parse(respText);          │
+│     return doc.RootElement.EnumerateArray()                │
+│         .Select(e => e.GetRawText())  // 转为字符串        │
+│         .ToArray();                   // 独立于 doc        │
+│ }                                                           │
+│                                                             │
+│ // 在使用时重新解析                                         │
+│ foreach (var itemJson in raw)                              │
+│ {                                                           │
+│     using var doc = JsonDocument.Parse(itemJson);          │
+│     var payload = ExtractPayload(doc.RootElement);         │
+│     // 克隆 payload 为新的 JsonDocument                    │
+│     var cloned = JsonDocument.Parse(                       │
+│         payload.GetRawText()).RootElement;                 │
+│     map[id] = cloned;  // 存储克隆的对象                   │
+│ }                                                           │
+└────────────────────────────────────────────────────────────┘
+
+关键点:
+  1. JsonElement 是对 JsonDocument 的引用，不是独立数据
+  2. using 语句会在结束时释放 JsonDocument
+  3. 释放后，所有引用它的 JsonElement 都无法访问
+  4. 解决方案: 通过字符串序列化/反序列化来克隆数据
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📚 相关文档
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+必读:
+  📄 错误诊断指南.md      - 错误处理和诊断方法
+  📄 开始使用.txt          - 完整启动指南
+
+参考:
+  📄 免登录模式说明.md      - 免登录功能说明
+  📄 更新说明.md            - v1.1.0 更新内容
+  📄 快速开始.txt           - 3 步快速启动
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📝 版本历史
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+v1.1.1 (2026-01-08)
+  🐛 修复 ObjectDisposedException (JsonDocument 已释放)
+  ✨ 增强错误处理和诊断功能
+  📄 新增错误诊断指南
+
+v1.1.0 (2026-01-08)
+  🎉 支持免登录模式
+  ✨ UI 优化，状态信息移到底部
+  🔧 修复所有编译错误
+
+v1.0.0 (2026-01-08)
+  🎊 初始版本发布
+  ✨ 6 个监控卡片
+  ✨ 自动刷新功能
+
+
+╔════════════════════════════════════════════════════════════════╗
+║                                                                ║
+║  修复完成! 现在应用应该可以正常运行了!                        ║
+║                                                                ║
+║  如有问题，查看 "错误诊断指南.md"                             ║
+║                                                                ║
+╚════════════════════════════════════════════════════════════════╝
+
+
+版本: v1.1.1
+日期: 2026-01-08
+状态: ✅ ObjectDisposedException 已修复
+优先级: 🔥 紧急修复
