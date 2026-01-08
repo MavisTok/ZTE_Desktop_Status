@@ -200,40 +200,66 @@ namespace ZTE.Services
         {
             try
             {
-                // 尝试获取设备信息
-                var payload = await _ubusClient.CallAsJsonAsync("zwrt_router.api", "router_get_status_no_auth", new { });
+                var deviceInfoPayload = await _ubusClient.CallAsJsonAsync("uci", "get", new
+                {
+                    config = "zwrt_zte_mdm",
+                    section = "device_info"
+                });
+
+                var commonConfigPayload = await _ubusClient.CallAsJsonAsync("uci", "get", new
+                {
+                    config = "zwrt_common_info",
+                    section = "common_config"
+                });
+
+                JsonElement routerStatusPayload = default;
+                try
+                {
+                    routerStatusPayload = await _ubusClient.CallAsJsonAsync("zwrt_router.api", "router_get_status_no_auth", new { });
+                }
+                catch
+                {
+                    // Some devices require login for this API; ignore and keep fields empty.
+                }
 
                 return new DeviceHardwareInfo
                 {
-                    device_name = GetStringProperty(payload, "device_name"),
-                    hardware_version = GetStringProperty(payload, "hardware_version"),
-                    software_version = GetStringProperty(payload, "software_version"),
-                    firmware_version = GetStringProperty(payload, "firmware_version"),
-                    imei = GetStringProperty(payload, "imei"),
-                    mac_address = GetStringProperty(payload, "mac_address"),
-                    serial_number = GetStringProperty(payload, "serial_number"),
+                    device_name = FirstNonEmpty(
+                        GetUciValue(commonConfigPayload, "device_alias_name"),
+                        GetUciValue(commonConfigPayload, "device_market_name"),
+                        GetUciValue(commonConfigPayload, "model_name")),
+                    hardware_version = GetUciValue(commonConfigPayload, "hardware_version"),
+                    software_version = FirstNonEmpty(
+                        GetUciValue(commonConfigPayload, "wa_inner_version"),
+                        GetUciValue(commonConfigPayload, "integrate_version")),
+                    firmware_version = GetUciValue(commonConfigPayload, "integrate_version"),
+                    imei = GetUciValue(deviceInfoPayload, "imei"),
+                    mac_address = GetUciValue(deviceInfoPayload, "wlan_mac_address"),
+                    serial_number = FirstNonEmpty(
+                        GetUciValue(deviceInfoPayload, "digitalcode"),
+                        GetUciValue(deviceInfoPayload, "modem_msn")),
 
-                    cpu_usage = GetStringProperty(payload, "cpu_usage"),
-                    cpu_model = GetStringProperty(payload, "cpu_model"),
-                    cpu_cores = GetStringProperty(payload, "cpu_cores"),
-                    cpu_frequency = GetStringProperty(payload, "cpu_frequency"),
+                    cpu_usage = GetStringProperty(routerStatusPayload, "cpu_usage"),
+                    cpu_model = GetStringProperty(routerStatusPayload, "cpu_model"),
+                    cpu_cores = GetStringProperty(routerStatusPayload, "cpu_cores"),
+                    cpu_frequency = GetStringProperty(routerStatusPayload, "cpu_frequency"),
 
-                    memory_total = GetStringProperty(payload, "memory_total"),
-                    memory_used = GetStringProperty(payload, "memory_used"),
-                    memory_free = GetStringProperty(payload, "memory_free"),
-                    memory_usage_percent = GetStringProperty(payload, "memory_usage_percent"),
+                    memory_total = GetStringProperty(routerStatusPayload, "memory_total"),
+                    memory_used = GetStringProperty(routerStatusPayload, "memory_used"),
+                    memory_free = GetStringProperty(routerStatusPayload, "memory_free"),
+                    memory_usage_percent = GetStringProperty(routerStatusPayload, "memory_usage_percent"),
 
-                    storage_total = GetStringProperty(payload, "storage_total"),
-                    storage_used = GetStringProperty(payload, "storage_used"),
-                    storage_free = GetStringProperty(payload, "storage_free"),
-                    storage_usage_percent = GetStringProperty(payload, "storage_usage_percent"),
+                    storage_total = GetStringProperty(routerStatusPayload, "storage_total"),
+                    storage_used = GetStringProperty(routerStatusPayload, "storage_used"),
+                    storage_free = GetStringProperty(routerStatusPayload, "storage_free"),
+                    storage_usage_percent = GetStringProperty(routerStatusPayload, "storage_usage_percent"),
 
-                    device_temperature = GetStringProperty(payload, "device_temperature"),
-                    cpu_temperature = GetStringProperty(payload, "cpu_temperature"),
-                    modem_temperature = GetStringProperty(payload, "modem_temperature"),
+                    device_temperature = GetStringProperty(routerStatusPayload, "device_temperature"),
+                    cpu_temperature = GetStringProperty(routerStatusPayload, "cpu_temperature"),
+                    modem_temperature = GetStringProperty(routerStatusPayload, "modem_temperature"),
 
-                    uptime = GetStringProperty(payload, "uptime"),
-                    connection_time = GetStringProperty(payload, "connection_time")
+                    uptime = GetStringProperty(routerStatusPayload, "uptime"),
+                    connection_time = GetStringProperty(routerStatusPayload, "connection_time")
                 };
             }
             catch (Exception ex)
@@ -249,7 +275,7 @@ namespace ZTE.Services
         {
             try
             {
-                // 构建批量调用（只调用4个已知可用的API）
+                // 构建批量调用（已验证可用的API）
                 var calls = new List<object>
                 {
                     _ubusClient.BuildCall("zwrt_wlan", "report", new { }, 1),
@@ -263,7 +289,9 @@ namespace ZTE.Services
                         }
                     }, 2),
                     _ubusClient.BuildCall("zwrt_deviceui", "zwrt_deviceui_direct_power_mode_get", new { moduleName = "web" }, 3),
-                    _ubusClient.BuildCall("zte_nwinfo_api", "nwinfo_get_netinfo", new { }, 4)
+                    _ubusClient.BuildCall("zte_nwinfo_api", "nwinfo_get_netinfo", new { }, 4),
+                    _ubusClient.BuildCall("uci", "get", new { config = "zwrt_zte_mdm", section = "device_info" }, 5),
+                    _ubusClient.BuildCall("uci", "get", new { config = "zwrt_common_info", section = "common_config" }, 6)
                 };
 
                 var results = await _ubusClient.BatchCallAsync(calls);
@@ -367,10 +395,27 @@ namespace ZTE.Services
                     cell.plmn = GetStringProperty(cellPayload, "plmn");
                 }
 
-                // 设备硬件信息 - 暂时使用默认值（这些信息需要特定的API或权限）
-                device.device_name = "ZTE 5G CPE";
-                // MAC地址、IMEI等信息暂时显示为N/A
-                // 如果需要这些信息，需要找到正确的API调用方式
+                if (results.TryGetValue(5, out var deviceInfoPayload))
+                {
+                    device.imei = GetUciValue(deviceInfoPayload, "imei");
+                    device.mac_address = GetUciValue(deviceInfoPayload, "wlan_mac_address");
+                    device.serial_number = FirstNonEmpty(
+                        GetUciValue(deviceInfoPayload, "digitalcode"),
+                        GetUciValue(deviceInfoPayload, "modem_msn"));
+                }
+
+                if (results.TryGetValue(6, out var commonConfigPayload))
+                {
+                    device.device_name = FirstNonEmpty(
+                        GetUciValue(commonConfigPayload, "device_alias_name"),
+                        GetUciValue(commonConfigPayload, "device_market_name"),
+                        GetUciValue(commonConfigPayload, "model_name"));
+                    device.hardware_version = GetUciValue(commonConfigPayload, "hardware_version");
+                    device.software_version = FirstNonEmpty(
+                        GetUciValue(commonConfigPayload, "wa_inner_version"),
+                        GetUciValue(commonConfigPayload, "integrate_version"));
+                    device.firmware_version = GetUciValue(commonConfigPayload, "integrate_version");
+                }
 
                 return (wifi, battery, powerMode, cell, device);
             }
@@ -397,6 +442,33 @@ namespace ZTE.Services
                     JsonValueKind.Null => "",
                     _ => prop.GetRawText()
                 };
+            }
+            return "";
+        }
+
+        private string GetUciValue(JsonElement payload, string propertyName)
+        {
+            if (payload.ValueKind == JsonValueKind.Undefined || payload.ValueKind == JsonValueKind.Null)
+            {
+                return "";
+            }
+
+            if (payload.TryGetProperty("values", out var values))
+            {
+                return GetStringProperty(values, propertyName);
+            }
+
+            return GetStringProperty(payload, propertyName);
+        }
+
+        private string FirstNonEmpty(params string[] values)
+        {
+            foreach (var value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
             }
             return "";
         }

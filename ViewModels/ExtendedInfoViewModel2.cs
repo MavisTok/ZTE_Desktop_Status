@@ -1,8 +1,10 @@
 using System;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using System.Windows.Media;
 using ZTE.Models;
 using ZTE.Services;
 using ZTE.Utils;
@@ -95,6 +97,32 @@ namespace ZTE.ViewModels
         public string CaStatus { get => _caStatus; set { _caStatus = value; OnPropertyChanged(); } }
         #endregion
 
+        #region Signal Level Properties
+        private int _nr5gRsrpLevel;
+        private int _nr5gRsrqLevel;
+        private int _nr5gSnrLevel;
+        private int _lteRsrpLevel;
+        private int _lteRsrqLevel;
+
+        private Brush _nr5gRsrpBrush = Brushes.Gray;
+        private Brush _nr5gRsrqBrush = Brushes.Gray;
+        private Brush _nr5gSnrBrush = Brushes.Gray;
+        private Brush _lteRsrpBrush = Brushes.Gray;
+        private Brush _lteRsrqBrush = Brushes.Gray;
+
+        public int Nr5gRsrpLevel { get => _nr5gRsrpLevel; set { _nr5gRsrpLevel = value; OnPropertyChanged(); } }
+        public int Nr5gRsrqLevel { get => _nr5gRsrqLevel; set { _nr5gRsrqLevel = value; OnPropertyChanged(); } }
+        public int Nr5gSnrLevel { get => _nr5gSnrLevel; set { _nr5gSnrLevel = value; OnPropertyChanged(); } }
+        public int LteRsrpLevel { get => _lteRsrpLevel; set { _lteRsrpLevel = value; OnPropertyChanged(); } }
+        public int LteRsrqLevel { get => _lteRsrqLevel; set { _lteRsrqLevel = value; OnPropertyChanged(); } }
+
+        public Brush Nr5gRsrpBrush { get => _nr5gRsrpBrush; set { _nr5gRsrpBrush = value; OnPropertyChanged(); } }
+        public Brush Nr5gRsrqBrush { get => _nr5gRsrqBrush; set { _nr5gRsrqBrush = value; OnPropertyChanged(); } }
+        public Brush Nr5gSnrBrush { get => _nr5gSnrBrush; set { _nr5gSnrBrush = value; OnPropertyChanged(); } }
+        public Brush LteRsrpBrush { get => _lteRsrpBrush; set { _lteRsrpBrush = value; OnPropertyChanged(); } }
+        public Brush LteRsrqBrush { get => _lteRsrqBrush; set { _lteRsrqBrush = value; OnPropertyChanged(); } }
+        #endregion
+
         #region Device Hardware Properties
         private string _deviceName;
         private string _hardwareVersion;
@@ -185,26 +213,45 @@ namespace ZTE.ViewModels
                 // Update Cell Info
                 NetworkType = cell.network_type ?? "N/A";
                 ActiveBand = cell.wan_active_band ?? "N/A";
-                Nr5gRsrp = string.IsNullOrEmpty(cell.nr5g_rsrp) || cell.nr5g_rsrp == "0" ? "N/A" : $"{cell.nr5g_rsrp} dBm";
-                Nr5gRsrq = string.IsNullOrEmpty(cell.nr5g_rsrq) || cell.nr5g_rsrq == "0" ? "N/A" : $"{cell.nr5g_rsrq} dB";
-                Nr5gSnr = string.IsNullOrEmpty(cell.nr5g_snr) || cell.nr5g_snr == "0" ? "N/A" : $"{cell.nr5g_snr} dB";
+                var nr5gRsrpValue = ParseSignalValue(cell.nr5g_rsrp);
+                var nr5gRsrqValue = ParseSignalValue(cell.nr5g_rsrq);
+                var nr5gSnrValue = ParseSignalValue(cell.nr5g_snr);
+
+                Nr5gRsrp = double.IsNaN(nr5gRsrpValue) ? "N/A" : $"{cell.nr5g_rsrp} dBm";
+                Nr5gRsrq = double.IsNaN(nr5gRsrqValue) ? "N/A" : $"{cell.nr5g_rsrq} dB";
+                Nr5gSnr = double.IsNaN(nr5gSnrValue) ? "N/A" : $"{cell.nr5g_snr} dB";
                 Nr5gPci = cell.nr5g_pci ?? "N/A";
                 Nr5gBand = cell.nr5g_band ?? "N/A";
                 Nr5gBandwidth = string.IsNullOrEmpty(cell.nr5g_bandwidth) ? "N/A" : $"{cell.nr5g_bandwidth} MHz";
                 Nr5gCellId = cell.nr5g_cell_id ?? "N/A";
-                LteRsrp = string.IsNullOrEmpty(cell.lte_rsrp) || cell.lte_rsrp == "0" ? "N/A" : $"{cell.lte_rsrp} dBm";
-                LteRsrq = string.IsNullOrEmpty(cell.lte_rsrq) || cell.lte_rsrq == "0" ? "N/A" : $"{cell.lte_rsrq} dB";
+                var lteRsrpValue = ParseSignalValue(cell.lte_rsrp);
+                var lteRsrqValue = ParseSignalValue(cell.lte_rsrq);
+
+                LteRsrp = double.IsNaN(lteRsrpValue) ? "N/A" : $"{cell.lte_rsrp} dBm";
+                LteRsrq = double.IsNaN(lteRsrqValue) ? "N/A" : $"{cell.lte_rsrq} dB";
                 LtePci = cell.lte_pci ?? "N/A";
                 // LTE频段：如果太长则只显示前面部分
                 LteBand = FormatLteBand(cell.lte_band);
                 CaStatus = cell.ca_status ?? "N/A";
 
+                Nr5gRsrpLevel = MapToPercent(nr5gRsrpValue, -120, -80);
+                Nr5gRsrqLevel = MapToPercent(nr5gRsrqValue, -20, -3);
+                Nr5gSnrLevel = MapToPercent(nr5gSnrValue, -10, 30);
+                LteRsrpLevel = MapToPercent(lteRsrpValue, -120, -80);
+                LteRsrqLevel = MapToPercent(lteRsrqValue, -20, -3);
+
+                Nr5gRsrpBrush = GetRsrpBrush(nr5gRsrpValue);
+                Nr5gRsrqBrush = GetRsrqBrush(nr5gRsrqValue);
+                Nr5gSnrBrush = GetSnrBrush(nr5gSnrValue);
+                LteRsrpBrush = GetRsrpBrush(lteRsrpValue);
+                LteRsrqBrush = GetRsrqBrush(lteRsrqValue);
+
                 // Update Device Info
-                DeviceName = device.device_name ?? "ZTE 5G CPE";
-                HardwareVersion = device.hardware_version ?? "N/A";
-                SoftwareVersion = device.software_version ?? "N/A";
-                Imei = device.imei ?? "N/A";
-                MacAddress = device.mac_address ?? "N/A";
+                DeviceName = string.IsNullOrWhiteSpace(device.device_name) ? "ZTE 5G CPE" : device.device_name;
+                HardwareVersion = string.IsNullOrWhiteSpace(device.hardware_version) ? "N/A" : device.hardware_version;
+                SoftwareVersion = string.IsNullOrWhiteSpace(device.software_version) ? "N/A" : device.software_version;
+                Imei = string.IsNullOrWhiteSpace(device.imei) ? "N/A" : device.imei;
+                MacAddress = string.IsNullOrWhiteSpace(device.mac_address) ? "N/A" : device.mac_address;
                 CpuUsage = string.IsNullOrEmpty(device.cpu_usage) ? "N/A" : $"{device.cpu_usage}%";
                 MemoryUsage = string.IsNullOrEmpty(device.memory_usage_percent) ? "N/A" : $"{device.memory_usage_percent}%";
                 StorageUsage = string.IsNullOrEmpty(device.storage_usage_percent) ? "N/A" : $"{device.storage_usage_percent}%";
@@ -247,6 +294,50 @@ namespace ZTE.ViewModels
             if (string.IsNullOrEmpty(lteBand)) return "N/A";
             // 将逗号替换为逗号+空格，便于换行
             return lteBand.Replace(",", ", ");
+        }
+
+        private static double ParseSignalValue(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw) || raw == "0") return double.NaN;
+            return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+                ? value
+                : double.NaN;
+        }
+
+        private static int MapToPercent(double value, double min, double max)
+        {
+            if (double.IsNaN(value)) return 0;
+            if (min >= max) return 0;
+            var clamped = Math.Max(min, Math.Min(max, value));
+            return (int)Math.Round((clamped - min) / (max - min) * 100);
+        }
+
+        private static Brush GetRsrpBrush(double value)
+        {
+            if (double.IsNaN(value)) return Brushes.Gray;
+            if (value >= -80) return Brushes.Green;
+            if (value >= -90) return Brushes.YellowGreen;
+            if (value >= -100) return Brushes.Gold;
+            if (value >= -110) return Brushes.Orange;
+            return Brushes.Red;
+        }
+
+        private static Brush GetRsrqBrush(double value)
+        {
+            if (double.IsNaN(value)) return Brushes.Gray;
+            if (value >= -10) return Brushes.Green;
+            if (value >= -15) return Brushes.YellowGreen;
+            if (value >= -20) return Brushes.Orange;
+            return Brushes.Red;
+        }
+
+        private static Brush GetSnrBrush(double value)
+        {
+            if (double.IsNaN(value)) return Brushes.Gray;
+            if (value >= 20) return Brushes.Green;
+            if (value >= 13) return Brushes.YellowGreen;
+            if (value >= 0) return Brushes.Gold;
+            return Brushes.Red;
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

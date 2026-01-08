@@ -149,18 +149,33 @@ namespace ZTE.Api
                 throw new Exception("Invalid ubus response: missing result field.");
 
             // result: [code, payload]
-            if (result.ValueKind != JsonValueKind.Array || result.GetArrayLength() < 2)
+            if (result.ValueKind == JsonValueKind.Object)
+            {
+                return result;
+            }
+
+            if (result.ValueKind != JsonValueKind.Array)
+                throw new Exception("Invalid ubus response: result is not [code,payload].");
+
+            if (result.GetArrayLength() < 1)
                 throw new Exception("Invalid ubus response: result is not [code,payload].");
 
             var code = result[0].GetInt32();
             if (code != 0)
             {
                 // Some devices will return a human-readable error in result[1]
-                var detail = result[1].ValueKind == JsonValueKind.Object || result[1].ValueKind == JsonValueKind.String
+                var detail = result.GetArrayLength() > 1 &&
+                             (result[1].ValueKind == JsonValueKind.Object || result[1].ValueKind == JsonValueKind.String)
                     ? result[1].ToString()
                     : "";
 
                 throw new Exception($"Ubus call failed. code={code}, detail={detail}");
+            }
+
+            if (result.GetArrayLength() < 2)
+            {
+                // Some calls return [0] without payload when no data exists.
+                return JsonDocument.Parse("{}").RootElement;
             }
 
             return result[1];
