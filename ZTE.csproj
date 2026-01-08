@@ -84,6 +84,14 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Page Include="ExtendedInfoWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="JsonRpcWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -95,20 +103,39 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="ExtendedInfoWindow.xaml.cs">
+      <DependentUpon>ExtendedInfoWindow.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="JsonRpcWindow.xaml.cs">
+      <DependentUpon>JsonRpcWindow.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Models\BatteryInfo.cs" />
+    <Compile Include="Models\CellDetailInfo.cs" />
     <Compile Include="Models\DeviceCount.cs" />
+    <Compile Include="Models\DeviceHardwareInfo.cs" />
+    <Compile Include="Models\JsonRpcData.cs" />
     <Compile Include="Models\NetInfo.cs" />
+    <Compile Include="Models\PowerModeInfo.cs" />
     <Compile Include="Models\SimInfo.cs" />
     <Compile Include="Models\SpeedStat.cs" />
     <Compile Include="Models\WanStatus.cs" />
+    <Compile Include="Models\WifiDetailInfo.cs" />
     <Compile Include="Models\WifiReport.cs" />
+    <Compile Include="Services\ExtendedInfoService.cs" />
     <Compile Include="Services\HomeDashboardService.cs" />
     <Compile Include="Utils\FormatUtil.cs" />
+    <Compile Include="Utils\HarParser.cs" />
     <Compile Include="Utils\RelayCommand.cs" />
     <Compile Include="ViewModels\DashboardViewModel.cs" />
+    <Compile Include="ViewModels\ExtendedInfoViewModel.cs" />
+    <Compile Include="ViewModels\ExtendedInfoViewModel2.cs" />
+    <Compile Include="ViewModels\JsonRpcViewModel.cs" />
     <Compile Include="ViewModels\ViewModelBase.cs" />
   </ItemGroup>
   <ItemGroup>

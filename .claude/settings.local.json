@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(dir:*)",
-      "Bash(nuget install:*)"
+      "Bash(nuget install:*)",
+      "Bash(cat:*)",
+      "Bash(powershell -Command \"Get-Content 192.168.0.1.har | Select-String -Pattern ''\"\"method\"\":\"\"call\"\"'' | Measure-Object\")",
+      "Bash(dotnet build:*)",
+      "Bash(\"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" ZTE.csproj /t:Build /p:Configuration=Debug)",
+      "Bash(powershell -Command:*)",
+      "Bash(msbuild:*)",
+      "Bash(python3:*)"
     ]
   }
 }

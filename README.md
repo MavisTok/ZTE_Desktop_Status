@@ -1,6 +1,6 @@
 # ZTE Router Dashboard
 
-一个用于监控 ZTE 路由器状态的 WPF 桌面应用程序。
+一个用于监控 ZTE U60Pro的 WPF 桌面应用程序。
 
 ## 功能特性
 

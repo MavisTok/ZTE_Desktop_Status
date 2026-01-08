@@ -13,6 +13,7 @@ namespace ZTE
     public partial class MainWindow : Window
     {
         private DashboardViewModel _viewModel;
+        private UbusClient _ubusClient;
 
         public MainWindow()
         {
@@ -32,14 +33,14 @@ namespace ZTE
                 int timeoutSeconds = AppSettings.RequestTimeoutSeconds;
 
                 // Create UbusClient
-                var ubusClient = new UbusClient(routerUrl, session, timeoutSeconds);
+                _ubusClient = new UbusClient(routerUrl, session, timeoutSeconds);
 
                 // Create SessionManager (for future session management)
-                var sessionManager = new SessionManager(ubusClient);
+                var sessionManager = new SessionManager(_ubusClient);
                 sessionManager.InitializeWithFixedSession(session);
 
                 // Create Dashboard Service
-                var dashboardService = new HomeDashboardService(ubusClient);
+                var dashboardService = new HomeDashboardService(_ubusClient);
 
                 // Create and set ViewModel
                 _viewModel = new DashboardViewModel(dashboardService, sessionManager);
@@ -72,6 +73,34 @@ namespace ZTE
 
             if (sender is PasswordBox passwordBox)
                 _viewModel.Password = passwordBox.Password;
+        }
+
+        private void OnExtendedInfoClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_ubusClient != null)
+                {
+                    var extendedInfoWindow = new ExtendedInfoWindow(_ubusClient);
+                    extendedInfoWindow.ShowDialog();
+                }
+                else
+                {
+                    MessageBox.Show(
+                        "无法获取 API 客户端实例",
+                        "错误",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"打开扩展信息窗口时出错:\n{ex.Message}",
+                    "错误",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
         }
     }
 }
