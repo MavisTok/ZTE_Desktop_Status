@@ -1,6 +1,8 @@
 using System;
 using System.Threading.Tasks;
+using System.Windows.Input;
 using System.Windows.Threading;
+using ZTE.Api;
 using ZTE.Services;
 using ZTE.Utils;
 
@@ -13,6 +15,7 @@ namespace ZTE.ViewModels
     {
         private readonly HomeDashboardService _dashboardService;
         private readonly DispatcherTimer _refreshTimer;
+        private readonly SessionManager _sessionManager;
 
         #region Properties
 
@@ -192,14 +195,56 @@ namespace ZTE.ViewModels
             set => SetProperty(ref _statusMessage, value);
         }
 
+        private int _loginModeIndex;
+        public int LoginModeIndex
+        {
+            get => _loginModeIndex;
+            set
+            {
+                if (SetProperty(ref _loginModeIndex, value))
+                {
+                    OnPropertyChanged(nameof(IsLoginMode));
+                    ApplyLoginMode();
+                }
+            }
+        }
+
+        public bool IsLoginMode => LoginModeIndex == 1;
+
+        private string _loginStatus;
+        public string LoginStatus
+        {
+            get => _loginStatus;
+            set => SetProperty(ref _loginStatus, value);
+        }
+
+        private string _password;
+        public string Password
+        {
+            get => _password;
+            set
+            {
+                if (SetProperty(ref _password, value))
+                    (LoginCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            }
+        }
+
+        public ICommand LoginCommand { get; }
+
         #endregion
 
-        public DashboardViewModel(HomeDashboardService dashboardService)
+        public DashboardViewModel(HomeDashboardService dashboardService, SessionManager sessionManager)
         {
             _dashboardService = dashboardService;
+            _sessionManager = sessionManager;
 
             // Initialize default values
             StatusMessage = "Initializing...";
+
+            LoginCommand = new RelayCommand(async _ => await ExecuteLoginAsync(), _ => CanLogin());
+
+            LoginModeIndex = IsAuthenticatedSession() ? 1 : 0;
+            UpdateLoginStatus();
 
             // Setup auto-refresh timer (configurable interval)
             _refreshTimer = new DispatcherTimer
@@ -328,6 +373,57 @@ namespace ZTE.ViewModels
                     System.Diagnostics.Debug.WriteLine($"Inner Message: {ex.InnerException.Message}");
                 }
                 System.Diagnostics.Debug.WriteLine("===============================");
+            }
+        }
+
+        private async Task ExecuteLoginAsync()
+        {
+            try
+            {
+                StatusMessage = "Logging in...";
+                await _sessionManager.LoginAsync(Password);
+                UpdateLoginStatus();
+                StatusMessage = "Connected";
+            }
+            catch (Exception ex)
+            {
+                LoginStatus = $"登录失败: {ex.Message}";
+                StatusMessage = "Login failed";
+            }
+        }
+
+        private bool CanLogin()
+        {
+            return IsLoginMode && !string.IsNullOrWhiteSpace(Password);
+        }
+
+        private void ApplyLoginMode()
+        {
+            if (LoginModeIndex == 0)
+            {
+                _sessionManager.InitializeWithFixedSession(AppSettings.UnauthenticatedSessionToken);
+                AppSettings.SessionToken = AppSettings.UnauthenticatedSessionToken;
+            }
+
+            UpdateLoginStatus();
+            (LoginCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
+        private bool IsAuthenticatedSession()
+        {
+            var session = _sessionManager.CurrentSession;
+            return !string.IsNullOrWhiteSpace(session) && session != AppSettings.UnauthenticatedSessionToken;
+        }
+
+        private void UpdateLoginStatus()
+        {
+            if (LoginModeIndex == 0)
+            {
+                LoginStatus = "免登录模式";
+            }
+            else
+            {
+                LoginStatus = IsAuthenticatedSession() ? "已登录" : "未登录";
             }
         }
     }

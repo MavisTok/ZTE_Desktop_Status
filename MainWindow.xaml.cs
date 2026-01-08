@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Windows;
+using System.Windows.Controls;
 using ZTE.Api;
 using ZTE.Services;
 using ZTE.ViewModels;
@@ -41,7 +42,7 @@ namespace ZTE
                 var dashboardService = new HomeDashboardService(ubusClient);
 
                 // Create and set ViewModel
-                _viewModel = new DashboardViewModel(dashboardService);
+                _viewModel = new DashboardViewModel(dashboardService, sessionManager);
                 DataContext = _viewModel;
 
                 // Start auto-refresh
@@ -62,6 +63,15 @@ namespace ZTE
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
+        }
+
+        private void OnLoginPasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (_viewModel == null)
+                return;
+
+            if (sender is PasswordBox passwordBox)
+                _viewModel.Password = passwordBox.Password;
         }
     }
 }

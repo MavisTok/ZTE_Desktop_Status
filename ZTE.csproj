@@ -107,6 +107,7 @@
     <Compile Include="Models\WifiReport.cs" />
     <Compile Include="Services\HomeDashboardService.cs" />
     <Compile Include="Utils\FormatUtil.cs" />
+    <Compile Include="Utils\RelayCommand.cs" />
     <Compile Include="ViewModels\DashboardViewModel.cs" />
     <Compile Include="ViewModels\ViewModelBase.cs" />
   </ItemGroup>
