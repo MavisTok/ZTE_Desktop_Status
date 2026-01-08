@@ -80,6 +80,20 @@ namespace ZTE.Api
 
                 if (string.IsNullOrWhiteSpace(sessionToken))
                     throw new InvalidOperationException("Login failed. Please verify the password.");
+                var passwordHash = ComputeSha256Hex(string.IsNullOrEmpty(salt)
+                    ? password
+                    : password + salt);
+
+                var loginResponse = await _client.CallAsJsonAsync("zwrt_web", "web_login", new { password = passwordHash });
+                if (!loginResponse.TryGetProperty("result", out var resultElement) || resultElement.GetInt32() != 0)
+                    throw new InvalidOperationException("Login failed. Please verify the password.");
+
+                if (!loginResponse.TryGetProperty("ubus_rpc_session", out var sessionElement))
+                    throw new InvalidOperationException("Login failed: missing session token.");
+
+                var sessionToken = sessionElement.GetString();
+                if (string.IsNullOrWhiteSpace(sessionToken))
+                    throw new InvalidOperationException("Login failed: empty session token.");
 
                 _currentSession = sessionToken;
                 _client.Session = sessionToken;
