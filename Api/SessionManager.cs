@@ -61,6 +61,25 @@ namespace ZTE.Api
                     ? saltElement.GetString()
                     : string.Empty;
 
+                var passwordHashCandidates = BuildPasswordHashCandidates(password, salt);
+                string sessionToken = null;
+
+                foreach (var passwordHash in passwordHashCandidates)
+                {
+                    var loginResponse = await _client.CallAsJsonAsync("zwrt_web", "web_login", new { password = passwordHash });
+                    if (!loginResponse.TryGetProperty("result", out var resultElement) || resultElement.GetInt32() != 0)
+                        continue;
+
+                    if (!loginResponse.TryGetProperty("ubus_rpc_session", out var sessionElement))
+                        throw new InvalidOperationException("Login failed: missing session token.");
+
+                    sessionToken = sessionElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(sessionToken))
+                        break;
+                }
+
+                if (string.IsNullOrWhiteSpace(sessionToken))
+                    throw new InvalidOperationException("Login failed. Please verify the password.");
                 var passwordHash = ComputeSha256Hex(string.IsNullOrEmpty(salt)
                     ? password
                     : password + salt);
@@ -96,6 +115,19 @@ namespace ZTE.Api
             foreach (var b in bytes)
                 builder.Append(b.ToString("X2"));
             return builder.ToString();
+        }
+
+        private static string[] BuildPasswordHashCandidates(string password, string salt)
+        {
+            if (string.IsNullOrEmpty(salt))
+                return new[] { ComputeSha256Hex(password) };
+
+            return new[]
+            {
+                ComputeSha256Hex(salt + password),
+                ComputeSha256Hex(password + salt),
+                ComputeSha256Hex(password)
+            };
         }
 
         /// <summary>
