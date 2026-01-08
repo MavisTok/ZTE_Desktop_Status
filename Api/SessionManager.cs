@@ -1,5 +1,8 @@
 using System;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
+using ZTE;
 
 namespace ZTE.Api
 {
@@ -41,14 +44,58 @@ namespace ZTE.Api
         }
 
         /// <summary>
-        /// Login with username and password (to be implemented)
-        /// This should call something like: ubus call session login { username, password }
+        /// Login with password using zwrt_web.web_login based on captured HAR flow.
         /// </summary>
-        public async Task<string> LoginAsync(string username, string password)
+        public async Task<string> LoginAsync(string password)
         {
-            // TODO: Implement actual login
-            // Example: var result = await _client.CallAsync<LoginResponse>("session", "login", new { username, password })
-            throw new NotImplementedException("Login API not yet captured. Use InitializeWithFixedSession for now.");
+            if (string.IsNullOrWhiteSpace(password))
+                throw new ArgumentException("Password is required.", nameof(password));
+
+            var previousSession = _client.Session;
+            _client.Session = AppSettings.UnauthenticatedSessionToken;
+
+            try
+            {
+                var loginInfo = await _client.CallAsJsonAsync("zwrt_web", "web_login_info", new { });
+                var salt = loginInfo.TryGetProperty("zte_web_sault", out var saltElement)
+                    ? saltElement.GetString()
+                    : string.Empty;
+
+                var passwordHash = ComputeSha256Hex(string.IsNullOrEmpty(salt)
+                    ? password
+                    : password + salt);
+
+                var loginResponse = await _client.CallAsJsonAsync("zwrt_web", "web_login", new { password = passwordHash });
+                if (!loginResponse.TryGetProperty("result", out var resultElement) || resultElement.GetInt32() != 0)
+                    throw new InvalidOperationException("Login failed. Please verify the password.");
+
+                if (!loginResponse.TryGetProperty("ubus_rpc_session", out var sessionElement))
+                    throw new InvalidOperationException("Login failed: missing session token.");
+
+                var sessionToken = sessionElement.GetString();
+                if (string.IsNullOrWhiteSpace(sessionToken))
+                    throw new InvalidOperationException("Login failed: empty session token.");
+
+                _currentSession = sessionToken;
+                _client.Session = sessionToken;
+                AppSettings.SessionToken = sessionToken;
+                return sessionToken;
+            }
+            catch
+            {
+                _client.Session = previousSession;
+                throw;
+            }
+        }
+
+        private static string ComputeSha256Hex(string input)
+        {
+            using var sha256 = SHA256.Create();
+            var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(input));
+            var builder = new StringBuilder(bytes.Length * 2);
+            foreach (var b in bytes)
+                builder.Append(b.ToString("X2"));
+            return builder.ToString();
         }
 
         /// <summary>
