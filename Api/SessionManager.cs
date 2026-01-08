@@ -52,52 +52,44 @@ namespace ZTE.Api
                 throw new ArgumentException("Password is required.", nameof(password));
 
             var previousSession = _client.Session;
-            _client.Session = AppSettings.UnauthenticatedSessionToken;
+
+            // 关键：login_info 与 login 都必须用 0000 session 调用
+            _client.Session = "00000000000000000000000000000000";
 
             try
             {
+                // 1) 获取 salt
                 var loginInfo = await _client.CallAsJsonAsync("zwrt_web", "web_login_info", new { });
-                var salt = loginInfo.TryGetProperty("zte_web_sault", out var saltElement)
-                    ? saltElement.GetString()
-                    : string.Empty;
 
-                var passwordHashCandidates = BuildPasswordHashCandidates(password, salt);
-                string sessionToken = null;
+                if (!loginInfo.TryGetProperty("zte_web_sault", out var saltElement))
+                    throw new InvalidOperationException("Cannot find zte_web_sault in web_login_info response.");
 
-                foreach (var passwordHash in passwordHashCandidates)
-                {
-                    var loginResponse = await _client.CallAsJsonAsync("zwrt_web", "web_login", new { password = passwordHash });
-                    if (!loginResponse.TryGetProperty("result", out var resultElement) || resultElement.GetInt32() != 0)
-                        continue;
+                var salt = saltElement.GetString();
+                if (string.IsNullOrWhiteSpace(salt))
+                    throw new InvalidOperationException("Salt is empty.");
 
-                    if (!loginResponse.TryGetProperty("ubus_rpc_session", out var sessionElement))
-                        throw new InvalidOperationException("Login failed: missing session token.");
+                // 2) 计算哈希：SHA256( SHA256(password) + salt )
+                var h1 = ComputeSha256HexUpper(password);      // 第一层
+                var h2 = ComputeSha256HexUpper(h1 + salt);     // 第二层（最终发送）
 
-                    sessionToken = sessionElement.GetString();
-                    if (!string.IsNullOrWhiteSpace(sessionToken))
-                        break;
-                }
+                // 3) 调 web_login
+                var loginResp = await _client.CallAsJsonAsync("zwrt_web", "web_login", new { password = h2 });
 
-                if (string.IsNullOrWhiteSpace(sessionToken))
-                    throw new InvalidOperationException("Login failed. Please verify the password.");
-                var passwordHash = ComputeSha256Hex(string.IsNullOrEmpty(salt)
-                    ? password
-                    : password + salt);
-
-                var loginResponse = await _client.CallAsJsonAsync("zwrt_web", "web_login", new { password = passwordHash });
-                if (!loginResponse.TryGetProperty("result", out var resultElement) || resultElement.GetInt32() != 0)
+                if (!loginResp.TryGetProperty("result", out var resultElement) || resultElement.GetInt32() != 0)
                     throw new InvalidOperationException("Login failed. Please verify the password.");
 
-                if (!loginResponse.TryGetProperty("ubus_rpc_session", out var sessionElement))
-                    throw new InvalidOperationException("Login failed: missing session token.");
+                if (!loginResp.TryGetProperty("ubus_rpc_session", out var sessionElement))
+                    throw new InvalidOperationException("Login failed: missing ubus_rpc_session.");
 
                 var sessionToken = sessionElement.GetString();
                 if (string.IsNullOrWhiteSpace(sessionToken))
-                    throw new InvalidOperationException("Login failed: empty session token.");
+                    throw new InvalidOperationException("Login failed: ubus_rpc_session is empty.");
 
+                // 4) 切换为登录后的 session
                 _currentSession = sessionToken;
                 _client.Session = sessionToken;
                 AppSettings.SessionToken = sessionToken;
+
                 return sessionToken;
             }
             catch
@@ -105,6 +97,16 @@ namespace ZTE.Api
                 _client.Session = previousSession;
                 throw;
             }
+        }
+
+        private static string ComputeSha256HexUpper(string input)
+        {
+            using var sha256 = System.Security.Cryptography.SHA256.Create();
+            var bytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
+            var sb = new System.Text.StringBuilder(bytes.Length * 2);
+            foreach (var b in bytes)
+                sb.Append(b.ToString("X2")); // 大写 HEX
+            return sb.ToString();
         }
 
         private static string ComputeSha256Hex(string input)
